@@ -1,9 +1,11 @@
-
+use std::fmt::Debug;
+use std::default::Default;
 //TODO
 //- Category is typed by an enum
 //- Category is generic
 //- Token has line and col numbers
 
+#[derive(Debug, PartialEq, Clone)]
 enum TokenCategory {
     ParOpen,
     ParClose,
@@ -19,29 +21,29 @@ enum TokenCategory {
     Bool,
 }
 
-#[derive(Debug, PartialEq)]
-struct Token {
-    category: String,
+#[derive(Debug, PartialEq, Clone)]
+struct Token<C: Debug + PartialEq + Clone + Default> {
+    category: C,
     lexeme: String,
 }
 
 
-type Action = Fn(char, &mut usize, &mut String, &mut Token);
+type Action<C> = Fn(char, &mut usize, &mut String, &mut Token<C>);
 type Match = Fn(char) -> bool;
-type Delta = Vec<(&'static str, Box<Match>, &'static str, Box<Action>)>;
+type Delta<C> = Vec<(&'static str, Box<Match>, &'static str, Box<Action<C>>)>;
 
-struct Lexer {
-    delta: Delta,
+struct Lexer<C: Debug + PartialEq + Clone + Default> {
+    delta: Delta<C>,
 }
 
-impl Lexer {
-    fn get_next_token(&self, src: String, start_index: usize) -> (bool, Option<Token>, usize) {
+impl<C: Debug + PartialEq + Clone + Default> Lexer<C> {
+    fn get_next_token(&self, src: String, start_index: usize) -> (bool, Option<Token<C>>, usize) {
         let mut index = start_index;
         let mut state = "INITIAL";
         let mut error = false;
         let mut error_string = String::new();
 
-        let mut token = Token { category: String::new(), lexeme: String::new()};
+        let mut token = Token { category: Default::default(), lexeme: String::new()};
 
         loop {
             if state == "END" || state == "ERROR" {
@@ -86,12 +88,12 @@ impl Lexer {
         }
 
         //println!("error {:?} category {:?} lexeme {:?}", error, category, lexeme);
-        let mut maybe_token = None;
-        if token.category != "" {
-            maybe_token = Some(token);
-        }
+        //let mut maybe_token = None;
+        //if token.category != "" {
+            //maybe_token = Some(token);
+        //}
 
-        return (error, maybe_token, index)
+        return (error, Some(token), index)
     }
 }
 
@@ -104,23 +106,23 @@ fn get_category_for_id(s: String) -> &'static str {
     }
 }
 
-fn action_null(_: char, _: &mut usize, _: &mut String, _: &mut Token) {
+fn action_null(_: char, _: &mut usize, _: &mut String, _: &mut Token<String>) {
 }
 
-fn action_lambda(_: char, index: &mut usize, _: &mut String, _: &mut Token) {
+fn action_lambda(_: char, index: &mut usize, _: &mut String, _: &mut Token<String>) {
     *index -= 1
 }
 
-fn build_action(category: &'static str) -> Box<Action> {
-    Box::new(move |c: char, _: &mut usize, _: &mut String, token: &mut Token | {
+fn build_action(category: &'static str) -> Box<Action<String>> {
+    Box::new(move |c: char, _: &mut usize, _: &mut String, token: &mut Token<String> | {
         token.lexeme.push(c);
         token.category = category.to_string();
     })
 }
 
 // TODO can I omit closure argument types?
-fn build_error_action(some_error: &'static str) -> Box<Action> {
-    Box::new(move |c: char, _: &mut usize, error: &mut String, token: &mut Token | {
+fn build_error_action(some_error: &'static str) -> Box<Action<String>> {
+    Box::new(move |c: char, _: &mut usize, error: &mut String, token: &mut Token<String> | {
         token.lexeme.push(c);
         token.category = "ERROR".to_string();
         *error = format!("ERROR: {}", some_error);
@@ -128,13 +130,13 @@ fn build_error_action(some_error: &'static str) -> Box<Action> {
 }
 
 
-fn action_id_try_reserved(_: char, index: &mut usize, _: &mut String, token: &mut Token) {
+fn action_id_try_reserved(_: char, index: &mut usize, _: &mut String, token: &mut Token<String>) {
     //TODO get_category_for_id should accept a reference to a String
     token.category = get_category_for_id(token.lexeme.clone()).to_string();
     *index -= 1;
 }
 
-fn action_id(c: char, _: &mut usize, _: &mut String, token: &mut Token) {
+fn action_id(c: char, _: &mut usize, _: &mut String, token: &mut Token<String>) {
     token.lexeme.push(c);
     token.category = get_category_for_id(token.lexeme.clone()).to_string();
 }
@@ -147,7 +149,7 @@ mod tests {
     #[test]
     fn get_next_token() {
 
-        let delta: Delta = vec![
+        let delta: Delta<String> = vec![
     ("INITIAL"            , Box::new(|c| c.is_whitespace())                     , "INITIAL"            , Box::new(action_null)           ),
     ("INITIAL"            , Box::new(|c| c == '(')                        , "END"                , build_action("PAROPEN")         ),
     ("INITIAL"            , Box::new(|c| c == ')')                        , "END"                , build_action("PARCLOSE")        ),
