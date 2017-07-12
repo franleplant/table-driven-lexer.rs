@@ -7,6 +7,10 @@ use std::default::Default;
 
 #[derive(Debug, PartialEq, Clone)]
 enum TokenCategory {
+    //Specials
+    Default,
+    Error,
+    // Posta
     ParOpen,
     ParClose,
     OpMat,
@@ -19,6 +23,12 @@ enum TokenCategory {
     And,
     Not,
     Bool,
+}
+
+impl Default for TokenCategory {
+    fn default() -> TokenCategory {
+        TokenCategory::Default
+    }
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -97,48 +107,47 @@ impl<C: Debug + PartialEq + Clone + Default> Lexer<C> {
     }
 }
 
-fn get_category_for_id(s: String) -> &'static str {
+fn get_category_for_id(s: &String) -> TokenCategory {
     match s.as_str() {
-        "define" => "DEFINE",
-        "if" => "IF",
-        "and" => "AND",
-        _ => "ID"
+        "define" => TokenCategory::Define,
+        "if" => TokenCategory::If,
+        "and" => TokenCategory::And,
+        _ => TokenCategory::Id
     }
 }
 
-fn action_null(_: char, _: &mut usize, _: &mut String, _: &mut Token<String>) {
+fn action_null(_: char, _: &mut usize, _: &mut String, _: &mut Token<TokenCategory>) {
 }
 
-fn action_lambda(_: char, index: &mut usize, _: &mut String, _: &mut Token<String>) {
+fn action_lambda(_: char, index: &mut usize, _: &mut String, _: &mut Token<TokenCategory>) {
     *index -= 1
 }
 
-fn build_action(category: &'static str) -> Box<Action<String>> {
-    Box::new(move |c: char, _: &mut usize, _: &mut String, token: &mut Token<String> | {
+fn build_action(category: TokenCategory) -> Box<Action<TokenCategory>> {
+    Box::new(move |c: char, _: &mut usize, _: &mut String, token: &mut Token<TokenCategory> | {
         token.lexeme.push(c);
-        token.category = category.to_string();
+        token.category = category.clone();
     })
 }
 
 // TODO can I omit closure argument types?
-fn build_error_action(some_error: &'static str) -> Box<Action<String>> {
-    Box::new(move |c: char, _: &mut usize, error: &mut String, token: &mut Token<String> | {
+fn build_error_action(some_error: &'static str) -> Box<Action<TokenCategory>> {
+    Box::new(move |c: char, _: &mut usize, error: &mut String, token: &mut Token<TokenCategory> | {
         token.lexeme.push(c);
-        token.category = "ERROR".to_string();
+        token.category = TokenCategory::Error;
         *error = format!("ERROR: {}", some_error);
     })
 }
 
 
-fn action_id_try_reserved(_: char, index: &mut usize, _: &mut String, token: &mut Token<String>) {
-    //TODO get_category_for_id should accept a reference to a String
-    token.category = get_category_for_id(token.lexeme.clone()).to_string();
+fn action_id_try_reserved(_: char, index: &mut usize, _: &mut String, token: &mut Token<TokenCategory>) {
+    token.category = get_category_for_id(&token.lexeme);
     *index -= 1;
 }
 
-fn action_id(c: char, _: &mut usize, _: &mut String, token: &mut Token<String>) {
+fn action_id(c: char, _: &mut usize, _: &mut String, token: &mut Token<TokenCategory>) {
     token.lexeme.push(c);
-    token.category = get_category_for_id(token.lexeme.clone()).to_string();
+    token.category = get_category_for_id(&token.lexeme);
 }
 
 
@@ -148,23 +157,24 @@ mod tests {
 
     #[test]
     fn get_next_token() {
+        use TokenCategory::*;
 
-        let delta: Delta<String> = vec![
+        let delta: Delta<TokenCategory> = vec![
     ("INITIAL"            , Box::new(|c| c.is_whitespace())                     , "INITIAL"            , Box::new(action_null)           ),
-    ("INITIAL"            , Box::new(|c| c == '(')                        , "END"                , build_action("PAROPEN")         ),
-    ("INITIAL"            , Box::new(|c| c == ')')                        , "END"                , build_action("PARCLOSE")        ),
-    ("INITIAL"            , Box::new(|c| c == '+' || c == '-' || c == '*'), "TRAILING_WHITESPACE", build_action("OPMAT")                 ),
-    ("INITIAL"            , Box::new(|c| c == '=')                        , "TRAILING_WHITESPACE", build_action("OPREL")                 ),
-    ("INITIAL"            , Box::new(|c| c == '>' || c == '<')            , "OPREL_COMPOSITE"    , build_action("OPREL")                 ),
-    ("INITIAL"            , Box::new(|c| c == '"')                        , "STRING"             , build_action("STRING")                ),
-    ("INITIAL"            , Box::new(|c| c.is_alphabetic())                     , "ID"                 , build_action("ID")                    ),
-    ("INITIAL"            , Box::new(|c| c.is_numeric())                     , "NUMBER"             , build_action("NUMBER")                ),
+    ("INITIAL"            , Box::new(|c| c == '(')                        , "END"                , build_action(ParOpen)         ),
+    ("INITIAL"            , Box::new(|c| c == ')')                        , "END"                , build_action(ParClose)        ),
+    ("INITIAL"            , Box::new(|c| c == '+' || c == '-' || c == '*'), "TRAILING_WHITESPACE", build_action(OpMat)                 ),
+    ("INITIAL"            , Box::new(|c| c == '=')                        , "TRAILING_WHITESPACE", build_action(OpRel)                 ),
+    ("INITIAL"            , Box::new(|c| c == '>' || c == '<')            , "OPREL_COMPOSITE"    , build_action(OpRel)                 ),
+    ("INITIAL"            , Box::new(|c| c == '"')                        , "STRING"             , build_action(Str)                ),
+    ("INITIAL"            , Box::new(|c| c.is_alphabetic())                     , "ID"           , build_action(Id)                    ),
+    ("INITIAL"            , Box::new(|c| c.is_numeric())                     , "NUMBER"          , build_action(Number)                ),
     ("INITIAL"            , Box::new(|_| true)                            , "ERROR"              , build_error_action("BAD INIT TOKEN")   ),
 
-    ("TRAILING_WHITESPACE", Box::new(|c| c.is_whitespace())                     , "END"                , Box::new(action_null)),
+    ("TRAILING_WHITESPACE", Box::new(|c| c.is_whitespace())                     , "END"          , Box::new(action_null)),
     ("TRAILING_WHITESPACE", Box::new(|_| true)                            , "END"                , build_error_action("WHITESPACE EXPECTED")),
 
-    ("OPREL_COMPOSITE"    , Box::new(|c| c == '=')                       , "TRAILING_WHITESPACE", build_action("OPREL")),
+    ("OPREL_COMPOSITE"    , Box::new(|c| c == '=')                       , "TRAILING_WHITESPACE", build_action(OpRel)),
     ("OPREL_COMPOSITE"    , Box::new(|c| c.is_whitespace())              , "TRAILING_WHITESPACE", Box::new(action_lambda)),
     ("OPREL_COMPOSITE"    , Box::new(|_| true)                           , "ERROR"           , build_error_action("WHITESPACE OR = EXPECTED")),
 
@@ -173,13 +183,13 @@ mod tests {
     ("ID"                 , Box::new(|c| c == ')')                        , "END"                , Box::new(action_id_try_reserved)           ),
     ("ID"                 , Box::new(|_| true)                            , "ERROR"              , build_error_action("BAD ID")    ),
 
-    ("NUMBER"             , Box::new(|c| c.is_numeric())                     , "NUMBER"             , build_action("NUMBER")         ),
+    ("NUMBER"             , Box::new(|c| c.is_numeric())                     , "NUMBER"             , build_action(Number)         ),
     ("NUMBER"             , Box::new(|c| c.is_whitespace())                     , "TRAILING_WHITESPACE", Box::new(action_lambda)),
     ("NUMBER"             , Box::new(|c| c == ')')                        , "END"                , Box::new(action_lambda)         ),
     ("NUMBER"             , Box::new(|_| true)                            , "ERROR"              , build_error_action("BAD NUMBER")),
 
-    ("STRING"             , Box::new(|c| c == '"')                        , "STRING_END"         , build_action("STRING")         ),
-    ("STRING"             , Box::new(|_| true)                            , "STRING"             , build_action("STRING")         ),
+    ("STRING"             , Box::new(|c| c == '"')                        , "STRING_END"         , build_action(Str)         ),
+    ("STRING"             , Box::new(|_| true)                            , "STRING"             , build_action(Str)         ),
 
     ("STRING_END"         , Box::new(|c| c.is_whitespace())               , "TRAILING_WHITESPACE", Box::new(action_lambda)),
     ("STRING_END"         , Box::new(|c| c == ')')                        , "END"                , Box::new(action_lambda)        ),
@@ -196,28 +206,28 @@ mod tests {
 
         let (_, token, _) = l.get_next_token("hello".to_string(), 0);
         let token = token.unwrap();
-        assert_eq!(token.category, "ID".to_string());
+        assert_eq!(token.category, Id);
         assert_eq!(token.lexeme, "hello".to_string());
 
         let (_, token, _) = l.get_next_token("12345".to_string(), 0);
         let token = token.unwrap();
-        assert_eq!(token.category, "NUMBER".to_string());
+        assert_eq!(token.category, Number);
         assert_eq!(token.lexeme, "12345".to_string());
 
         //println!("test");
         let (_, token, _) = l.get_next_token(">=".to_string(), 0);
         let token = token.unwrap();
-        assert_eq!(token.category, "OPREL".to_string());
+        assert_eq!(token.category, OpRel);
         assert_eq!(token.lexeme, ">=".to_string());
 
         let (_, token, _) = l.get_next_token(">= ".to_string(), 0);
         let token = token.unwrap();
-        assert_eq!(token.category, "OPREL".to_string());
+        assert_eq!(token.category, OpRel);
         assert_eq!(token.lexeme, ">=".to_string());
 
         let (_, token, _) = l.get_next_token("\"hello 123\"".to_string(), 0);
         let token = token.unwrap();
-        assert_eq!(token.category, "STRING".to_string());
+        assert_eq!(token.category, Str);
         assert_eq!(token.lexeme, "\"hello 123\"".to_string());
     }
 
