@@ -52,7 +52,10 @@ impl<C: Debug + PartialEq + Clone + Default> Lexer<C> {
         let mut error = false;
         let mut error_string = String::new();
 
-        let mut token = Token { category: Default::default(), lexeme: String::new()};
+        let mut token = Token {
+            category: Default::default(),
+            lexeme: String::new(),
+        };
 
         loop {
             if state == "END" || state == "ERROR" {
@@ -70,11 +73,11 @@ impl<C: Debug + PartialEq + Clone + Default> Lexer<C> {
 
             for &(ref from_state, ref is_match, ref to_state, ref action) in &self.delta {
                 if state != *from_state {
-                    continue
+                    continue;
                 }
 
                 if !is_match(c) {
-                    continue
+                    continue;
                 }
 
                 found = true;
@@ -98,10 +101,10 @@ impl<C: Debug + PartialEq + Clone + Default> Lexer<C> {
         //println!("error {:?} category {:?} lexeme {:?}", error, category, lexeme);
         //let mut maybe_token = None;
         //if token.category != "" {
-            //maybe_token = Some(token);
+        //maybe_token = Some(token);
         //}
 
-        return (error, Some(token), index)
+        return (error, Some(token), index);
     }
 }
 
@@ -115,9 +118,7 @@ mod tests {
     fn get_next_token() {
         use TokenCategory::*;
 
-        let l = Lexer {
-            delta: get_delta(),
-        };
+        let l = Lexer { delta: get_delta() };
 
 
 
@@ -156,34 +157,36 @@ mod tests {
             "not" => TokenCategory::Not,
             "true" => TokenCategory::Bool,
             "false" => TokenCategory::Bool,
-            _ => TokenCategory::Id
+            _ => TokenCategory::Id,
         }
     }
 
-    fn action_null(_: char, _: &mut usize, _: &mut String, _: &mut Token<TokenCategory>) {
-    }
+    fn action_null(_: char, _: &mut usize, _: &mut String, _: &mut Token<TokenCategory>) {}
 
     fn action_lambda(_: char, index: &mut usize, _: &mut String, _: &mut Token<TokenCategory>) {
         *index -= 1
     }
 
     fn build_action(category: TokenCategory) -> Box<Action<TokenCategory>> {
-        Box::new(move |c, _, _, token | {
-            token.lexeme.push(c);
-            token.category = category.clone();
-        })
+        Box::new(move |c, _, _, token| {
+                     token.lexeme.push(c);
+                     token.category = category.clone();
+                 })
     }
 
     fn build_error_action(some_error: &'static str) -> Box<Action<TokenCategory>> {
-        Box::new(move |c, _, error, token | {
-            token.lexeme.push(c);
-            token.category = TokenCategory::Error;
-            *error = format!("ERROR: {}", some_error);
-        })
+        Box::new(move |c, _, error, token| {
+                     token.lexeme.push(c);
+                     token.category = TokenCategory::Error;
+                     *error = format!("ERROR: {}", some_error);
+                 })
     }
 
 
-    fn action_id_try_reserved(_: char, index: &mut usize, _: &mut String, token: &mut Token<TokenCategory>) {
+    fn action_id_try_reserved(_: char,
+                              index: &mut usize,
+                              _: &mut String,
+                              token: &mut Token<TokenCategory>) {
         token.category = get_category_for_id(&token.lexeme);
         *index -= 1;
     }
@@ -197,42 +200,67 @@ mod tests {
     fn get_delta() -> Delta<TokenCategory> {
         use TokenCategory::*;
 
-        vec![
-    ("INITIAL"     , Box::new(|c| c.is_whitespace())                , "INITIAL"            , Box::new(action_null)  ),
-    ("INITIAL"     , Box::new(|c| c == '(')                         , "END"                , build_action(ParOpen)  ),
-    ("INITIAL"     , Box::new(|c| c == ')')                         , "END"                , build_action(ParClose) ),
-    ("INITIAL"     , Box::new(|c| c == '+' || c == '-' || c == '*') , "TRAILING_WHITESPACE", build_action(OpMat)    ),
-    ("INITIAL"     , Box::new(|c| c == '=')                         , "TRAILING_WHITESPACE", build_action(OpRel)    ),
-    ("INITIAL"     , Box::new(|c| c == '>' || c == '<')             , "OPREL_COMPOSITE"    , build_action(OpRel)    ),
-    ("INITIAL"     , Box::new(|c| c == '"')                         , "STRING"             , build_action(Str)      ),
-    ("INITIAL"     , Box::new(|c| c.is_alphabetic())                , "ID"                 , build_action(Id)       ),
-    ("INITIAL"     , Box::new(|c| c.is_numeric())                   , "NUMBER"             , build_action(Number)   ),
-    ("INITIAL"     , Box::new(|_| true)                             , "ERROR"              , build_error_action("BAD INIT TOKEN")),
+        vec![("INITIAL", Box::new(|c| c.is_whitespace()), "INITIAL", Box::new(action_null)),
+             ("INITIAL", Box::new(|c| c == '('), "END", build_action(ParOpen)),
+             ("INITIAL", Box::new(|c| c == ')'), "END", build_action(ParClose)),
+             ("INITIAL",
+              Box::new(|c| c == '+' || c == '-' || c == '*'),
+              "TRAILING_WHITESPACE",
+              build_action(OpMat)),
+             ("INITIAL", Box::new(|c| c == '='), "TRAILING_WHITESPACE", build_action(OpRel)),
+             ("INITIAL",
+              Box::new(|c| c == '>' || c == '<'),
+              "OPREL_COMPOSITE",
+              build_action(OpRel)),
+             ("INITIAL", Box::new(|c| c == '"'), "STRING", build_action(Str)),
+             ("INITIAL", Box::new(|c| c.is_alphabetic()), "ID", build_action(Id)),
+             ("INITIAL", Box::new(|c| c.is_numeric()), "NUMBER", build_action(Number)),
+             ("INITIAL", Box::new(|_| true), "ERROR", build_error_action("BAD INIT TOKEN")),
 
-    ("TRAILING_WHITESPACE", Box::new(|c| c.is_whitespace())                     , "END"          , Box::new(action_null)),
-    ("TRAILING_WHITESPACE", Box::new(|_| true)                            , "END"                , build_error_action("WHITESPACE EXPECTED")),
+             ("TRAILING_WHITESPACE", Box::new(|c| c.is_whitespace()), "END", Box::new(action_null)),
+             ("TRAILING_WHITESPACE",
+              Box::new(|_| true),
+              "END",
+              build_error_action("WHITESPACE EXPECTED")),
 
-    ("OPREL_COMPOSITE"    , Box::new(|c| c == '=')                       , "TRAILING_WHITESPACE", build_action(OpRel)),
-    ("OPREL_COMPOSITE"    , Box::new(|c| c.is_whitespace())              , "TRAILING_WHITESPACE", Box::new(action_lambda)),
-    ("OPREL_COMPOSITE"    , Box::new(|_| true)                           , "ERROR"           , build_error_action("WHITESPACE OR = EXPECTED")),
+             ("OPREL_COMPOSITE",
+              Box::new(|c| c == '='),
+              "TRAILING_WHITESPACE",
+              build_action(OpRel)),
+             ("OPREL_COMPOSITE",
+              Box::new(|c| c.is_whitespace()),
+              "TRAILING_WHITESPACE",
+              Box::new(action_lambda)),
+             ("OPREL_COMPOSITE",
+              Box::new(|_| true),
+              "ERROR",
+              build_error_action("WHITESPACE OR = EXPECTED")),
 
-    ("ID"                 , Box::new(|c| c.is_alphabetic())                     , "ID"                 , Box::new(action_id)),
-    ("ID"                 , Box::new(|c| c.is_whitespace())                     , "TRAILING_WHITESPACE", Box::new(action_id_try_reserved)),
-    ("ID"                 , Box::new(|c| c == ')')                        , "END"                , Box::new(action_id_try_reserved)),
-    ("ID"                 , Box::new(|_| true)                            , "ERROR"              , build_error_action("BAD ID")    ),
+             ("ID", Box::new(|c| c.is_alphabetic()), "ID", Box::new(action_id)),
+             ("ID",
+              Box::new(|c| c.is_whitespace()),
+              "TRAILING_WHITESPACE",
+              Box::new(action_id_try_reserved)),
+             ("ID", Box::new(|c| c == ')'), "END", Box::new(action_id_try_reserved)),
+             ("ID", Box::new(|_| true), "ERROR", build_error_action("BAD ID")),
 
-    ("NUMBER"             , Box::new(|c| c.is_numeric())                     , "NUMBER"             , build_action(Number)         ),
-    ("NUMBER"             , Box::new(|c| c.is_whitespace())                     , "TRAILING_WHITESPACE", Box::new(action_lambda)),
-    ("NUMBER"             , Box::new(|c| c == ')')                        , "END"                , Box::new(action_lambda)         ),
-    ("NUMBER"             , Box::new(|_| true)                            , "ERROR"              , build_error_action("BAD NUMBER")),
+             ("NUMBER", Box::new(|c| c.is_numeric()), "NUMBER", build_action(Number)),
+             ("NUMBER",
+              Box::new(|c| c.is_whitespace()),
+              "TRAILING_WHITESPACE",
+              Box::new(action_lambda)),
+             ("NUMBER", Box::new(|c| c == ')'), "END", Box::new(action_lambda)),
+             ("NUMBER", Box::new(|_| true), "ERROR", build_error_action("BAD NUMBER")),
 
-    ("STRING"             , Box::new(|c| c == '"')                        , "STRING_END"         , build_action(Str)         ),
-    ("STRING"             , Box::new(|_| true)                            , "STRING"             , build_action(Str)         ),
+             ("STRING", Box::new(|c| c == '"'), "STRING_END", build_action(Str)),
+             ("STRING", Box::new(|_| true), "STRING", build_action(Str)),
 
-    ("STRING_END"         , Box::new(|c| c.is_whitespace())               , "TRAILING_WHITESPACE", Box::new(action_lambda)),
-    ("STRING_END"         , Box::new(|c| c == ')')                        , "END"                , Box::new(action_lambda)        ),
-    ("STRING_END"         , Box::new(|_| true)                            , "ERROR"              , build_error_action("BAD STRING")),
-        ]
+             ("STRING_END",
+              Box::new(|c| c.is_whitespace()),
+              "TRAILING_WHITESPACE",
+              Box::new(action_lambda)),
+             ("STRING_END", Box::new(|c| c == ')'), "END", Box::new(action_lambda)),
+             ("STRING_END", Box::new(|_| true), "ERROR", build_error_action("BAD STRING"))]
     }
 
 
