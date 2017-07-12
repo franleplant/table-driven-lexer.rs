@@ -1,9 +1,8 @@
 use std::fmt::Debug;
 use std::default::Default;
 //TODO
-//- Category is typed by an enum
-//- Category is generic
 //- Token has line and col numbers
+//- Internal State is generic and can be an Enum
 
 #[derive(Debug, PartialEq, Clone)]
 enum TokenCategory {
@@ -69,9 +68,8 @@ impl<C: Debug + PartialEq + Clone + Default> Lexer<C> {
             let mut found = false;
             //println!("c {:?} ", c);
 
-            //TODO naming sucks
-            for &(ref d_state, ref is_match, ref next_state, ref action) in &self.delta {
-                if state != *d_state {
+            for &(ref from_state, ref is_match, ref to_state, ref action) in &self.delta {
+                if state != *from_state {
                     continue
                 }
 
@@ -82,7 +80,7 @@ impl<C: Debug + PartialEq + Clone + Default> Lexer<C> {
                 found = true;
                 index += 1;
                 action(c, &mut index, &mut error_string, &mut token);
-                state = next_state;
+                state = to_state;
                 break;
             }
 
@@ -107,50 +105,6 @@ impl<C: Debug + PartialEq + Clone + Default> Lexer<C> {
     }
 }
 
-fn get_category_for_id(s: &String) -> TokenCategory {
-    match s.as_str() {
-        "define" => TokenCategory::Define,
-        "if" => TokenCategory::If,
-        "and" => TokenCategory::And,
-        "not" => TokenCategory::Not,
-        "true" => TokenCategory::Bool,
-        "false" => TokenCategory::Bool,
-        _ => TokenCategory::Id
-    }
-}
-
-fn action_null(_: char, _: &mut usize, _: &mut String, _: &mut Token<TokenCategory>) {
-}
-
-fn action_lambda(_: char, index: &mut usize, _: &mut String, _: &mut Token<TokenCategory>) {
-    *index -= 1
-}
-
-fn build_action(category: TokenCategory) -> Box<Action<TokenCategory>> {
-    Box::new(move |c, _, _, token | {
-        token.lexeme.push(c);
-        token.category = category.clone();
-    })
-}
-
-fn build_error_action(some_error: &'static str) -> Box<Action<TokenCategory>> {
-    Box::new(move |c, _, error, token | {
-        token.lexeme.push(c);
-        token.category = TokenCategory::Error;
-        *error = format!("ERROR: {}", some_error);
-    })
-}
-
-
-fn action_id_try_reserved(_: char, index: &mut usize, _: &mut String, token: &mut Token<TokenCategory>) {
-    token.category = get_category_for_id(&token.lexeme);
-    *index -= 1;
-}
-
-fn action_id(c: char, _: &mut usize, _: &mut String, token: &mut Token<TokenCategory>) {
-    token.lexeme.push(c);
-    token.category = get_category_for_id(&token.lexeme);
-}
 
 
 #[cfg(test)]
@@ -161,7 +115,89 @@ mod tests {
     fn get_next_token() {
         use TokenCategory::*;
 
-        let delta: Delta<TokenCategory> = vec![
+        let l = Lexer {
+            delta: get_delta(),
+        };
+
+
+
+        let (_, token, _) = l.get_next_token("hello".to_string(), 0);
+        let token = token.unwrap();
+        assert_eq!(token.category, Id);
+        assert_eq!(token.lexeme, "hello".to_string());
+
+        let (_, token, _) = l.get_next_token("12345".to_string(), 0);
+        let token = token.unwrap();
+        assert_eq!(token.category, Number);
+        assert_eq!(token.lexeme, "12345".to_string());
+
+        //println!("test");
+        let (_, token, _) = l.get_next_token(">=".to_string(), 0);
+        let token = token.unwrap();
+        assert_eq!(token.category, OpRel);
+        assert_eq!(token.lexeme, ">=".to_string());
+
+        let (_, token, _) = l.get_next_token(">= ".to_string(), 0);
+        let token = token.unwrap();
+        assert_eq!(token.category, OpRel);
+        assert_eq!(token.lexeme, ">=".to_string());
+
+        let (_, token, _) = l.get_next_token("\"hello 123\"".to_string(), 0);
+        let token = token.unwrap();
+        assert_eq!(token.category, Str);
+        assert_eq!(token.lexeme, "\"hello 123\"".to_string());
+    }
+
+    fn get_category_for_id(s: &String) -> TokenCategory {
+        match s.as_str() {
+            "define" => TokenCategory::Define,
+            "if" => TokenCategory::If,
+            "and" => TokenCategory::And,
+            "not" => TokenCategory::Not,
+            "true" => TokenCategory::Bool,
+            "false" => TokenCategory::Bool,
+            _ => TokenCategory::Id
+        }
+    }
+
+    fn action_null(_: char, _: &mut usize, _: &mut String, _: &mut Token<TokenCategory>) {
+    }
+
+    fn action_lambda(_: char, index: &mut usize, _: &mut String, _: &mut Token<TokenCategory>) {
+        *index -= 1
+    }
+
+    fn build_action(category: TokenCategory) -> Box<Action<TokenCategory>> {
+        Box::new(move |c, _, _, token | {
+            token.lexeme.push(c);
+            token.category = category.clone();
+        })
+    }
+
+    fn build_error_action(some_error: &'static str) -> Box<Action<TokenCategory>> {
+        Box::new(move |c, _, error, token | {
+            token.lexeme.push(c);
+            token.category = TokenCategory::Error;
+            *error = format!("ERROR: {}", some_error);
+        })
+    }
+
+
+    fn action_id_try_reserved(_: char, index: &mut usize, _: &mut String, token: &mut Token<TokenCategory>) {
+        token.category = get_category_for_id(&token.lexeme);
+        *index -= 1;
+    }
+
+    fn action_id(c: char, _: &mut usize, _: &mut String, token: &mut Token<TokenCategory>) {
+        token.lexeme.push(c);
+        token.category = get_category_for_id(&token.lexeme);
+    }
+
+
+    fn get_delta() -> Delta<TokenCategory> {
+        use TokenCategory::*;
+
+        vec![
     ("INITIAL"     , Box::new(|c| c.is_whitespace())                , "INITIAL"            , Box::new(action_null)  ),
     ("INITIAL"     , Box::new(|c| c == '(')                         , "END"                , build_action(ParOpen)  ),
     ("INITIAL"     , Box::new(|c| c == ')')                         , "END"                , build_action(ParClose) ),
@@ -196,42 +232,9 @@ mod tests {
     ("STRING_END"         , Box::new(|c| c.is_whitespace())               , "TRAILING_WHITESPACE", Box::new(action_lambda)),
     ("STRING_END"         , Box::new(|c| c == ')')                        , "END"                , Box::new(action_lambda)        ),
     ("STRING_END"         , Box::new(|_| true)                            , "ERROR"              , build_error_action("BAD STRING")),
-        ];
-
-
-
-        let l = Lexer {
-            delta: delta,
-        };
-
-
-
-        let (_, token, _) = l.get_next_token("hello".to_string(), 0);
-        let token = token.unwrap();
-        assert_eq!(token.category, Id);
-        assert_eq!(token.lexeme, "hello".to_string());
-
-        let (_, token, _) = l.get_next_token("12345".to_string(), 0);
-        let token = token.unwrap();
-        assert_eq!(token.category, Number);
-        assert_eq!(token.lexeme, "12345".to_string());
-
-        //println!("test");
-        let (_, token, _) = l.get_next_token(">=".to_string(), 0);
-        let token = token.unwrap();
-        assert_eq!(token.category, OpRel);
-        assert_eq!(token.lexeme, ">=".to_string());
-
-        let (_, token, _) = l.get_next_token(">= ".to_string(), 0);
-        let token = token.unwrap();
-        assert_eq!(token.category, OpRel);
-        assert_eq!(token.lexeme, ">=".to_string());
-
-        let (_, token, _) = l.get_next_token("\"hello 123\"".to_string(), 0);
-        let token = token.unwrap();
-        assert_eq!(token.category, Str);
-        assert_eq!(token.lexeme, "\"hello 123\"".to_string());
+        ]
     }
+
 
 
 }
