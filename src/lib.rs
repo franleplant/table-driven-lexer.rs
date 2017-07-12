@@ -159,21 +159,21 @@ mod tests {
     ("OPREL_COMPOSITE"    , Box::new(|c| c.is_whitespace())              , "TRAILING_WHITESPACE", Box::new(actionLambda)),
     ("OPREL_COMPOSITE"    , Box::new(|c| true)                           , "ERROR"           , buildErrorAction("WHITESPACE OR = EXPECTED")),
 
-    ("ID"                 , Box::new(|c| c.is_alphabetic())                     , "ID"                 , Box::new(actionId)                      ),
-    ("ID"                 , Box::new(|c| c.is_whitespace())                     , "TRAILING_WHITESPACE", Box::new(actionIdTryReserved)           ),
+    ("ID"                 , Box::new(|c| c.is_alphabetic())                     , "ID"                 , Box::new(actionId)),
+    ("ID"                 , Box::new(|c| c.is_whitespace())                     , "TRAILING_WHITESPACE", Box::new(actionIdTryReserved)),
     ("ID"                 , Box::new(|c| c == ')')                        , "END"                , Box::new(actionIdTryReserved)           ),
     ("ID"                 , Box::new(|c| true)                            , "ERROR"              , buildErrorAction("BAD ID")    ),
 
     ("NUMBER"             , Box::new(|c| c.is_numeric())                     , "NUMBER"             , buildAction("NUMBER")         ),
-    ("NUMBER"             , Box::new(|c| c.is_whitespace())                     , "TRAILING_WHITESPACE", Box::new(actionLambda)                    ),
-    ("NUMBER"             , Box::new(|c| c == ')')                        , "END"                , Box::new(actionLambda)                    ),
+    ("NUMBER"             , Box::new(|c| c.is_whitespace())                     , "TRAILING_WHITESPACE", Box::new(actionLambda)),
+    ("NUMBER"             , Box::new(|c| c == ')')                        , "END"                , Box::new(actionLambda)         ),
     ("NUMBER"             , Box::new(|c| true)                            , "ERROR"              , buildErrorAction("BAD NUMBER")),
 
     ("STRING"             , Box::new(|c| c == '"')                        , "STRING_END"         , buildAction("STRING")         ),
     ("STRING"             , Box::new(|c| true)                            , "STRING"             , buildAction("STRING")         ),
 
-    ("STRING_END"         , Box::new(|c| c.is_whitespace())                     , "TRAILING_WHITESPACE", Box::new(actionLambda)                    ),
-    ("STRING_END"         , Box::new(|c| c == ')')                        , "END"                , Box::new(actionLambda)                    ),
+    ("STRING_END"         , Box::new(|c| c.is_whitespace())               , "TRAILING_WHITESPACE", Box::new(actionLambda)),
+    ("STRING_END"         , Box::new(|c| c == ')')                        , "END"                , Box::new(actionLambda)        ),
     ("STRING_END"         , Box::new(|c| true)                            , "ERROR"              , buildErrorAction("BAD STRING")),
         ];
 
