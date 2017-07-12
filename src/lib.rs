@@ -112,6 +112,9 @@ fn get_category_for_id(s: &String) -> TokenCategory {
         "define" => TokenCategory::Define,
         "if" => TokenCategory::If,
         "and" => TokenCategory::And,
+        "not" => TokenCategory::Not,
+        "true" => TokenCategory::Bool,
+        "false" => TokenCategory::Bool,
         _ => TokenCategory::Id
     }
 }
@@ -124,15 +127,14 @@ fn action_lambda(_: char, index: &mut usize, _: &mut String, _: &mut Token<Token
 }
 
 fn build_action(category: TokenCategory) -> Box<Action<TokenCategory>> {
-    Box::new(move |c: char, _: &mut usize, _: &mut String, token: &mut Token<TokenCategory> | {
+    Box::new(move |c, _, _, token | {
         token.lexeme.push(c);
         token.category = category.clone();
     })
 }
 
-// TODO can I omit closure argument types?
 fn build_error_action(some_error: &'static str) -> Box<Action<TokenCategory>> {
-    Box::new(move |c: char, _: &mut usize, error: &mut String, token: &mut Token<TokenCategory> | {
+    Box::new(move |c, _, error, token | {
         token.lexeme.push(c);
         token.category = TokenCategory::Error;
         *error = format!("ERROR: {}", some_error);
@@ -180,7 +182,7 @@ mod tests {
 
     ("ID"                 , Box::new(|c| c.is_alphabetic())                     , "ID"                 , Box::new(action_id)),
     ("ID"                 , Box::new(|c| c.is_whitespace())                     , "TRAILING_WHITESPACE", Box::new(action_id_try_reserved)),
-    ("ID"                 , Box::new(|c| c == ')')                        , "END"                , Box::new(action_id_try_reserved)           ),
+    ("ID"                 , Box::new(|c| c == ')')                        , "END"                , Box::new(action_id_try_reserved)),
     ("ID"                 , Box::new(|_| true)                            , "ERROR"              , build_error_action("BAD ID")    ),
 
     ("NUMBER"             , Box::new(|c| c.is_numeric())                     , "NUMBER"             , build_action(Number)         ),
