@@ -93,7 +93,7 @@ impl<C: Debug + PartialEq + Clone + Default> Lexer<C> {
             }
         }
 
-        if error_string.len() != 0 {
+        if error_string.len() != 0 || token.category == Default::default() {
             error = true;
         }
 
@@ -162,16 +162,16 @@ mod tests {
         use TokenCategory::*;
 
         let delta: Delta<TokenCategory> = vec![
-    ("INITIAL"            , Box::new(|c| c.is_whitespace())                     , "INITIAL"            , Box::new(action_null)           ),
-    ("INITIAL"            , Box::new(|c| c == '(')                        , "END"                , build_action(ParOpen)         ),
-    ("INITIAL"            , Box::new(|c| c == ')')                        , "END"                , build_action(ParClose)        ),
-    ("INITIAL"            , Box::new(|c| c == '+' || c == '-' || c == '*'), "TRAILING_WHITESPACE", build_action(OpMat)                 ),
-    ("INITIAL"            , Box::new(|c| c == '=')                        , "TRAILING_WHITESPACE", build_action(OpRel)                 ),
-    ("INITIAL"            , Box::new(|c| c == '>' || c == '<')            , "OPREL_COMPOSITE"    , build_action(OpRel)                 ),
-    ("INITIAL"            , Box::new(|c| c == '"')                        , "STRING"             , build_action(Str)                ),
-    ("INITIAL"            , Box::new(|c| c.is_alphabetic())                     , "ID"           , build_action(Id)                    ),
-    ("INITIAL"            , Box::new(|c| c.is_numeric())                     , "NUMBER"          , build_action(Number)                ),
-    ("INITIAL"            , Box::new(|_| true)                            , "ERROR"              , build_error_action("BAD INIT TOKEN")   ),
+    ("INITIAL"     , Box::new(|c| c.is_whitespace())                , "INITIAL"            , Box::new(action_null)  ),
+    ("INITIAL"     , Box::new(|c| c == '(')                         , "END"                , build_action(ParOpen)  ),
+    ("INITIAL"     , Box::new(|c| c == ')')                         , "END"                , build_action(ParClose) ),
+    ("INITIAL"     , Box::new(|c| c == '+' || c == '-' || c == '*') , "TRAILING_WHITESPACE", build_action(OpMat)    ),
+    ("INITIAL"     , Box::new(|c| c == '=')                         , "TRAILING_WHITESPACE", build_action(OpRel)    ),
+    ("INITIAL"     , Box::new(|c| c == '>' || c == '<')             , "OPREL_COMPOSITE"    , build_action(OpRel)    ),
+    ("INITIAL"     , Box::new(|c| c == '"')                         , "STRING"             , build_action(Str)      ),
+    ("INITIAL"     , Box::new(|c| c.is_alphabetic())                , "ID"                 , build_action(Id)       ),
+    ("INITIAL"     , Box::new(|c| c.is_numeric())                   , "NUMBER"             , build_action(Number)   ),
+    ("INITIAL"     , Box::new(|_| true)                             , "ERROR"              , build_error_action("BAD INIT TOKEN")),
 
     ("TRAILING_WHITESPACE", Box::new(|c| c.is_whitespace())                     , "END"          , Box::new(action_null)),
     ("TRAILING_WHITESPACE", Box::new(|_| true)                            , "END"                , build_error_action("WHITESPACE EXPECTED")),
