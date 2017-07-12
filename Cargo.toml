@@ -1,0 +1,6 @@
+[package]
+name = "table-drive-lexer"
+version = "0.1.0"
+authors = ["Fran Guijarro <franleplant@gmail.com>"]
+
+[dependencies]
