@@ -36,10 +36,11 @@ pub struct Token<C: Debug + PartialEq + Clone + Default> {
     category: C,
     lexeme: String,
     line_number: usize,
+    col_number: usize,
 }
 
 
-type Action<C> = Fn(char, &mut usize, &mut String, &mut Token<C>);
+type Action<C> = Fn(char, &mut usize, &mut usize, &mut String, &mut Token<C>);
 type Match = Fn(char) -> bool;
 type Delta<C> = Vec<(&'static str, Box<Match>, &'static str, Box<Action<C>>)>;
 
@@ -49,6 +50,7 @@ pub struct Lexer<C: Debug + PartialEq + Clone + Default> {
     chars: Vec<char>,
     line_number: usize,
     newline_indices: HashSet<usize>,
+    line_offset: usize,
 }
 
 impl<C: Debug + PartialEq + Clone + Default> Lexer<C> {
@@ -61,6 +63,7 @@ impl<C: Debug + PartialEq + Clone + Default> Lexer<C> {
             chars: src.chars().collect(),
             line_number: 1,
             newline_indices: HashSet::new(),
+            line_offset: 0,
         }
     }
 
@@ -81,14 +84,17 @@ impl<C: Debug + PartialEq + Clone + Default> Lexer<C> {
 
     pub fn get_next_token(&mut self) -> Option<Result<Token<C>, String>> {
         let mut index = self.start_index;
+        //let mut line_offset = self.line_offset;
         let mut state = "INITIAL";
         let mut error = false;
         let mut error_string = String::new();
 
+        // TODO can this be default?
         let mut token = Token {
             category: Default::default(),
             lexeme: String::new(),
             line_number: self.line_number,
+            col_number: 0,
         };
 
         loop {
@@ -102,12 +108,13 @@ impl<C: Debug + PartialEq + Clone + Default> Lexer<C> {
 
             let c = self.chars[index];
             let mut found = false;
-            println!("c {:?} ", c);
+            //println!("c {:?} ", c);
 
 
             if c == '\n' && !self.newline_indices.contains(&index) {
                 self.newline_indices.insert(index);
                 self.line_number += 1;
+                self.line_offset = index + 1;
 
                 if state == "INITIAL" {
                     token.line_number = self.line_number;
@@ -125,7 +132,13 @@ impl<C: Debug + PartialEq + Clone + Default> Lexer<C> {
 
                 found = true;
                 index += 1;
-                action(c, &mut index, &mut error_string, &mut token);
+                //line_offset = index;
+                //println!("{}, {}", index, line_offset);
+                action(c,
+                       &mut index,
+                       &mut self.line_offset,
+                       &mut error_string,
+                       &mut token);
                 state = to_state;
                 break;
             }
@@ -139,6 +152,7 @@ impl<C: Debug + PartialEq + Clone + Default> Lexer<C> {
         }
 
         self.start_index = index;
+        //self.line_offset = line_offset;
 
         if error_string.len() != 0 {
             error = true;
@@ -148,7 +162,7 @@ impl<C: Debug + PartialEq + Clone + Default> Lexer<C> {
             return Some(Err(format!("Error in {:?}, {}", index, token.lexeme)));
         }
 
-        println!("END");
+        //println!("END");
         return if token.category == Default::default() {
                    None
                } else {
@@ -167,42 +181,45 @@ mod tests {
     fn lex() {
         use TokenCategory::*;
 
-        let cases = vec![("> 123", vec![(OpRel, ">", 1), (Number, "123", 1)]),
+        let cases = vec![("> 123", vec![(OpRel, ">", 1, 1), (Number, "123", 1, 3)]),
                          ("(define (myfn x y)\n(+ 123\nx\ny))",
-                          vec![(ParOpen, "(", 1),
-                               (Define, "define", 1),
-                               (ParOpen, "(", 1),
-                               (Id, "myfn", 1),
-                               (Id, "x", 1),
-                               (Id, "y", 1),
-                               (ParClose, ")", 1),
-                               (ParOpen, "(", 2),
-                               (OpMat, "+", 2),
-                               (Number, "123", 2),
-                               (Id, "x", 3),
-                               (Id, "y", 4),
-                               (ParClose, ")", 4),
-                               (ParClose, ")", 4)])];
+                          vec![(ParOpen, "(", 1, 1),
+                               (Define, "define", 1, 2),
+                               (ParOpen, "(", 1, 9),
+                               (Id, "myfn", 1, 10),
+                               (Id, "x", 1, 15),
+                               (Id, "y", 1, 17),
+                               (ParClose, ")", 1, 18),
+                               (ParOpen, "(", 2, 1),
+                               (OpMat, "+", 2, 2),
+                               (Number, "123", 2, 4),
+                               (Id, "x", 3, 1),
+                               (Id, "y", 4, 1),
+                               (ParClose, ")", 4, 2),
+                               (ParClose, ")", 4, 3)])];
 
         for (src, expected) in cases {
             let tokens = Lexer::new(src.to_string(), get_delta()).lex();
-            let case_msg = format!("tokens {:?}, expected {:?}", tokens, expected);
+            let case_msg = format!("\ntokens {:?},\nexpected {:?}", tokens, expected);
             assert_eq!(tokens.len(), expected.len(), "{:?}", case_msg);
 
             println!("++++++++++++++");
-            for t in &tokens {
-                println!("{:?}", t);
-            }
+            println!("TEST CASE");
+            println!("{}", src);
+            println!("++++++++++++++");
 
             for i in 0..tokens.len() {
                 let ref t = tokens[i];
-                let (ref category, ref lexeme, line_number) = expected[i];
+                let (ref category, ref lexeme, line, col) = expected[i];
                 let category = category;
                 let lexeme = lexeme.to_string();
+                println!("{:?}", t);
+                let case_msg = format!("{:?}, expected {:?}", t, expected[i]);
 
                 assert_eq!(t.category, *category, "category {:?}", case_msg);
                 assert_eq!(t.lexeme, lexeme, "lexeme {:?}", case_msg);
-                assert_eq!(t.line_number, line_number, "line_number {:?}", case_msg);
+                assert_eq!(t.line_number, line, "line_number {:?}", case_msg);
+                assert_eq!(t.col_number, col, "col_number {:?}", case_msg);
             }
         }
 
@@ -260,21 +277,33 @@ mod tests {
         }
     }
 
-    fn action_null(_: char, _: &mut usize, _: &mut String, _: &mut Token<TokenCategory>) {}
+    fn action_null(_: char,
+                   _: &mut usize,
+                   _: &mut usize,
+                   _: &mut String,
+                   _: &mut Token<TokenCategory>) {
+    }
 
-    fn action_lambda(_: char, index: &mut usize, _: &mut String, _: &mut Token<TokenCategory>) {
+    fn action_lambda(_: char,
+                     index: &mut usize,
+                     _: &mut usize,
+                     _: &mut String,
+                     _: &mut Token<TokenCategory>) {
         *index -= 1;
     }
 
-    fn build_action(category: TokenCategory) -> Box<Action<TokenCategory>> {
-        Box::new(move |c, _, _, token| {
+    fn build_action(category: TokenCategory, save_col: bool) -> Box<Action<TokenCategory>> {
+        Box::new(move |c, index, line_offset, _, token| {
                      token.lexeme.push(c);
                      token.category = category.clone();
+                     if save_col {
+                         token.col_number = *index - *line_offset;
+                     }
                  })
     }
 
     fn build_error_action(some_error: &'static str) -> Box<Action<TokenCategory>> {
-        Box::new(move |c, _, error, token| {
+        Box::new(move |c, _, _, error, token| {
                      token.lexeme.push(c);
                      token.category = TokenCategory::Error;
                      *error = format!("ERROR: {}", some_error);
@@ -284,13 +313,18 @@ mod tests {
 
     fn action_id_try_reserved(_: char,
                               index: &mut usize,
+                              _: &mut usize,
                               _: &mut String,
                               token: &mut Token<TokenCategory>) {
         token.category = get_category_for_id(&token.lexeme);
         *index -= 1;
     }
 
-    fn action_id(c: char, _: &mut usize, _: &mut String, token: &mut Token<TokenCategory>) {
+    fn action_id(c: char,
+                 _: &mut usize,
+                 _: &mut usize,
+                 _: &mut String,
+                 token: &mut Token<TokenCategory>) {
         token.lexeme.push(c);
         token.category = get_category_for_id(&token.lexeme);
     }
@@ -300,20 +334,20 @@ mod tests {
         use TokenCategory::*;
 
         vec![("INITIAL", Box::new(|c| c.is_whitespace()), "INITIAL", Box::new(action_null)),
-             ("INITIAL", Box::new(|c| c == '('), "END", build_action(ParOpen)),
-             ("INITIAL", Box::new(|c| c == ')'), "END", build_action(ParClose)),
+             ("INITIAL", Box::new(|c| c == '('), "END", build_action(ParOpen, true)),
+             ("INITIAL", Box::new(|c| c == ')'), "END", build_action(ParClose, true)),
              ("INITIAL",
               Box::new(|c| c == '+' || c == '-' || c == '*'),
               "TRAILING_WHITESPACE",
-              build_action(OpMat)),
-             ("INITIAL", Box::new(|c| c == '='), "TRAILING_WHITESPACE", build_action(OpRel)),
+              build_action(OpMat, true)),
+             ("INITIAL", Box::new(|c| c == '='), "TRAILING_WHITESPACE", build_action(OpRel, true)),
              ("INITIAL",
               Box::new(|c| c == '>' || c == '<'),
               "OPREL_COMPOSITE",
-              build_action(OpRel)),
-             ("INITIAL", Box::new(|c| c == '"'), "STRING", build_action(Str)),
-             ("INITIAL", Box::new(|c| c.is_alphabetic()), "ID", build_action(Id)),
-             ("INITIAL", Box::new(|c| c.is_numeric()), "NUMBER", build_action(Number)),
+              build_action(OpRel, true)),
+             ("INITIAL", Box::new(|c| c == '"'), "STRING", build_action(Str, true)),
+             ("INITIAL", Box::new(|c| c.is_alphabetic()), "ID", build_action(Id, true)),
+             ("INITIAL", Box::new(|c| c.is_numeric()), "NUMBER", build_action(Number, true)),
              ("INITIAL", Box::new(|_| true), "ERROR", build_error_action("BAD INIT TOKEN")),
 
              ("TRAILING_WHITESPACE", Box::new(|c| c.is_whitespace()), "END", Box::new(action_null)),
@@ -325,7 +359,7 @@ mod tests {
              ("OPREL_COMPOSITE",
               Box::new(|c| c == '='),
               "TRAILING_WHITESPACE",
-              build_action(OpRel)),
+              build_action(OpRel, false)),
              ("OPREL_COMPOSITE",
               Box::new(|c| c.is_whitespace()),
               "TRAILING_WHITESPACE",
@@ -343,7 +377,7 @@ mod tests {
              ("ID", Box::new(|c| c == ')'), "END", Box::new(action_id_try_reserved)),
              ("ID", Box::new(|_| true), "ERROR", build_error_action("BAD ID")),
 
-             ("NUMBER", Box::new(|c| c.is_numeric()), "NUMBER", build_action(Number)),
+             ("NUMBER", Box::new(|c| c.is_numeric()), "NUMBER", build_action(Number, false)),
              ("NUMBER",
               Box::new(|c| c.is_whitespace()),
               "TRAILING_WHITESPACE",
@@ -351,8 +385,8 @@ mod tests {
              ("NUMBER", Box::new(|c| c == ')'), "END", Box::new(action_lambda)),
              ("NUMBER", Box::new(|_| true), "ERROR", build_error_action("BAD NUMBER")),
 
-             ("STRING", Box::new(|c| c == '"'), "STRING_END", build_action(Str)),
-             ("STRING", Box::new(|_| true), "STRING", build_action(Str)),
+             ("STRING", Box::new(|c| c == '"'), "STRING_END", build_action(Str, false)),
+             ("STRING", Box::new(|_| true), "STRING", build_action(Str, false)),
 
              ("STRING_END",
               Box::new(|c| c.is_whitespace()),
@@ -361,7 +395,4 @@ mod tests {
              ("STRING_END", Box::new(|c| c == ')'), "END", Box::new(action_lambda)),
              ("STRING_END", Box::new(|_| true), "ERROR", build_error_action("BAD STRING"))]
     }
-
-
-
 }
