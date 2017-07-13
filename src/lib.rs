@@ -59,26 +59,26 @@ impl<C: Debug + PartialEq + Clone + Default> Lexer<C> {
     }
 
     // Lex until completion
-    pub fn lex(&mut self) -> Vec<Token<C>>{
+    pub fn lex(&mut self) -> Vec<Token<C>> {
         let mut tokens: Vec<Token<C>> = vec![];
 
         while let Some(token_result) = self.get_next_token() {
             match token_result {
                 Ok(token) => tokens.push(token),
-                Err(error) => panic!("ERROR {:?} in\n{:?}", error, tokens)
+                Err(error) => panic!("ERROR {:?} in\n{:?}", error, tokens),
             }
         }
         //loop {
-            //if self.start_index >= self.chars.len() {
-                //break
-            //}
+        //if self.start_index >= self.chars.len() {
+        //break
+        //}
 
-            //if let Some(token_result) = self.get_next_token() {
-                //match token_result {
-                    //Ok(token) => tokens.push(token),
-                    //Err(error) => panic!("ERROR {:?} in\n{:?}", error, tokens)
-                //}
-            //}
+        //if let Some(token_result) = self.get_next_token() {
+        //match token_result {
+        //Ok(token) => tokens.push(token),
+        //Err(error) => panic!("ERROR {:?} in\n{:?}", error, tokens)
+        //}
+        //}
         //}
 
         tokens
@@ -126,7 +126,9 @@ impl<C: Debug + PartialEq + Clone + Default> Lexer<C> {
             }
 
             if !found {
-                return Some(Err(format!("Error: TOKEN NOT FOUND in {:?}, {}", index, token.lexeme)));
+                return Some(Err(format!("Error: TOKEN NOT FOUND in {:?}, {}",
+                                        index,
+                                        token.lexeme)));
             }
         }
 
@@ -141,10 +143,10 @@ impl<C: Debug + PartialEq + Clone + Default> Lexer<C> {
         }
 
         return if token.category == Default::default() {
-            None
-        } else {
-            Some(Ok(token))
-        };
+                   None
+               } else {
+                   Some(Ok(token))
+               };
     }
 }
 
@@ -158,28 +160,22 @@ mod tests {
     fn lex() {
         use TokenCategory::*;
 
-        let cases = vec![
-            ("> 123", vec![
-                (OpRel, ">"),
-                (Number, "123"),
-            ]),
-            ("(define (myfn x y)\n  (+ 123 x y))", vec![
-                (ParOpen, "("),
-                (Define, "define"),
-                (ParOpen, "("),
-                (Id, "myfn"),
-                (Id, "x"),
-                (Id, "y"),
-                (ParClose, ")"),
-                (ParOpen, "("),
-                (OpMat, "+"),
-                (Number, "123"),
-                (Id, "x"),
-                (Id, "y"),
-                (ParClose, ")"),
-                (ParClose, ")"),
-            ]),
-        ];
+        let cases = vec![("> 123", vec![(OpRel, ">"), (Number, "123")]),
+                         ("(define (myfn x y)\n  (+ 123 x y))",
+                          vec![(ParOpen, "("),
+                               (Define, "define"),
+                               (ParOpen, "("),
+                               (Id, "myfn"),
+                               (Id, "x"),
+                               (Id, "y"),
+                               (ParClose, ")"),
+                               (ParOpen, "("),
+                               (OpMat, "+"),
+                               (Number, "123"),
+                               (Id, "x"),
+                               (Id, "y"),
+                               (ParClose, ")"),
+                               (ParClose, ")")])];
 
         for (src, expected) in cases {
             let tokens = Lexer::new(src.to_string(), get_delta()).lex();
@@ -205,9 +201,7 @@ mod tests {
     #[should_panic]
     fn lex_fails() {
 
-        let cases = vec![
-            "abc123",
-        ];
+        let cases = vec!["abc123"];
 
         for src in cases {
             let _ = Lexer::new(src.to_string(), get_delta()).lex();
@@ -218,12 +212,10 @@ mod tests {
     fn get_next_token() {
         use TokenCategory::*;
 
-        let cases = vec![
-            (Id, "hello"),
-            (Number, "1234"),
-            (OpRel, ">="),
-            (Str, "\"hello 123\"")
-        ];
+        let cases = vec![(Id, "hello"),
+                         (Number, "1234"),
+                         (OpRel, ">="),
+                         (Str, "\"hello 123\"")];
 
         for (category, lexeme) in cases {
             let lexeme = lexeme.to_string();
