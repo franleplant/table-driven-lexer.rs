@@ -213,7 +213,13 @@ mod tests {
                 let (ref category, ref lexeme, line, col) = expected[i];
                 let category = category;
                 let lexeme = lexeme.to_string();
-                println!("{:?}", t);
+
+                println!("{:<10} {:<10} {:<4} {:<4}",
+                         format!("{:?}", t.category),
+                         t.lexeme,
+                         t.line_number,
+                         t.col_number);
+
                 let case_msg = format!("{:?}, expected {:?}", t, expected[i]);
 
                 assert_eq!(t.category, *category, "category {:?}", case_msg);
