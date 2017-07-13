@@ -2,7 +2,7 @@ use std::fmt::Debug;
 use std::default::Default;
 use std::collections::HashSet;
 //TODO
-//- Internal State is generic and can be an Enum
+//- Move the whole lisp lexer spec into /test directory
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum TokenCategory {
@@ -30,6 +30,50 @@ impl Default for TokenCategory {
     }
 }
 
+#[derive(Debug, PartialEq, Clone)]
+pub enum State {
+    INITIAL,
+    END,
+    ERROR,
+    ID,
+    TRAILING_WHITESPACE,
+ OPREL_COMPOSITE,
+ STRING,
+ STRING_END,
+ NUMBER,
+}
+
+impl InitialState for State {
+    fn initial_state() -> State {
+        State::INITIAL
+    }
+}
+
+impl EndState for State {
+    fn end_state() -> State {
+        State::END
+    }
+}
+
+impl ErrorState for State {
+    fn error_state() -> State {
+        State::ERROR
+    }
+}
+
+
+pub trait InitialState {
+    fn initial_state() -> Self;
+}
+
+pub trait EndState {
+    fn end_state() -> Self;
+}
+
+pub trait ErrorState {
+    fn error_state() -> Self;
+}
+
 #[derive(Debug, PartialEq, Clone, Default)]
 pub struct Token<C: Debug + PartialEq + Clone + Default> {
     category: C,
@@ -41,10 +85,10 @@ pub struct Token<C: Debug + PartialEq + Clone + Default> {
 
 type Action<C> = Fn(char, &mut usize, &mut usize, &mut String, &mut Token<C>);
 type Match = Fn(char) -> bool;
-type Delta<C> = Vec<(&'static str, Box<Match>, &'static str, Box<Action<C>>)>;
+type Delta<C, S> = Vec<(S, Box<Match>, S, Box<Action<C>>)>;
 
-pub struct Lexer<C: Debug + PartialEq + Clone + Default> {
-    delta: Delta<C>,
+pub struct Lexer<C: Debug + PartialEq + Clone + Default, S: Debug + PartialEq + Clone + InitialState + EndState + ErrorState > {
+    delta: Delta<C, S>,
     start_index: usize,
     chars: Vec<char>,
     line_number: usize,
@@ -52,8 +96,8 @@ pub struct Lexer<C: Debug + PartialEq + Clone + Default> {
     line_offset: usize,
 }
 
-impl<C: Debug + PartialEq + Clone + Default> Lexer<C> {
-    pub fn new(src: String, delta: Delta<C>) -> Lexer<C> {
+impl<C: Debug + PartialEq + Clone + Default, S: Debug + PartialEq + Clone + InitialState + EndState + ErrorState> Lexer<C, S> {
+    pub fn new(src: String, delta: Delta<C, S>) -> Lexer<C, S> {
         let src = src + " ";
 
         Lexer {
@@ -83,7 +127,7 @@ impl<C: Debug + PartialEq + Clone + Default> Lexer<C> {
 
     pub fn get_next_token(&mut self) -> Option<Result<Token<C>, String>> {
         let mut index = self.start_index;
-        let mut state = "INITIAL";
+        let mut state: S = InitialState::initial_state();
         let mut error = false;
         let mut error_string = String::new();
 
@@ -93,7 +137,7 @@ impl<C: Debug + PartialEq + Clone + Default> Lexer<C> {
         };
 
         loop {
-            if state == "END" || state == "ERROR" {
+            if state == EndState::end_state() || state == ErrorState::error_state() {
                 break;
             }
 
@@ -111,7 +155,7 @@ impl<C: Debug + PartialEq + Clone + Default> Lexer<C> {
                 self.line_number += 1;
                 self.line_offset = index + 1;
 
-                if state == "INITIAL" {
+                if state == InitialState::initial_state() {
                     token.line_number = self.line_number;
                 }
             }
@@ -132,7 +176,7 @@ impl<C: Debug + PartialEq + Clone + Default> Lexer<C> {
                        &mut self.line_offset,
                        &mut error_string,
                        &mut token);
-                state = to_state;
+                state = to_state.clone();
                 break;
             }
 
@@ -328,69 +372,43 @@ mod tests {
     }
 
 
-    fn get_delta() -> Delta<TokenCategory> {
+    fn get_delta() -> Delta<TokenCategory, State> {
         use TokenCategory::*;
+        use State::*;
 
-        vec![("INITIAL", Box::new(|c| c.is_whitespace()), "INITIAL", Box::new(action_null)),
-             ("INITIAL", Box::new(|c| c == '('), "END", build_action(ParOpen, true)),
-             ("INITIAL", Box::new(|c| c == ')'), "END", build_action(ParClose, true)),
-             ("INITIAL",
-              Box::new(|c| c == '+' || c == '-' || c == '*'),
-              "TRAILING_WHITESPACE",
-              build_action(OpMat, true)),
-             ("INITIAL", Box::new(|c| c == '='), "TRAILING_WHITESPACE", build_action(OpRel, true)),
-             ("INITIAL",
-              Box::new(|c| c == '>' || c == '<'),
-              "OPREL_COMPOSITE",
-              build_action(OpRel, true)),
-             ("INITIAL", Box::new(|c| c == '"'), "STRING", build_action(Str, true)),
-             ("INITIAL", Box::new(|c| c.is_alphabetic()), "ID", build_action(Id, true)),
-             ("INITIAL", Box::new(|c| c.is_numeric()), "NUMBER", build_action(Number, true)),
-             ("INITIAL", Box::new(|_| true), "ERROR", build_error_action("BAD INIT TOKEN")),
+        vec![(INITIAL, Box::new(|c| c.is_whitespace()), INITIAL, Box::new(action_null)),
+             (INITIAL, Box::new(|c| c == '('), END, build_action(ParOpen, true)),
+             (INITIAL, Box::new(|c| c == ')'), END, build_action(ParClose, true)),
+             (INITIAL, Box::new(|c| c == '+' || c == '-' || c == '*'), TRAILING_WHITESPACE, build_action(OpMat, true)),
+             (INITIAL, Box::new(|c| c == '='), TRAILING_WHITESPACE, build_action(OpRel, true)),
+             (INITIAL, Box::new(|c| c == '>' || c == '<'), OPREL_COMPOSITE, build_action(OpRel, true)),
+             (INITIAL, Box::new(|c| c == '"'), STRING, build_action(Str, true)),
+             (INITIAL, Box::new(|c| c.is_alphabetic()), ID, build_action(Id, true)),
+             (INITIAL, Box::new(|c| c.is_numeric()), NUMBER, build_action(Number, true)),
+             (INITIAL, Box::new(|_| true), ERROR, build_error_action("BAD INIT TOKEN")),
 
-             ("TRAILING_WHITESPACE", Box::new(|c| c.is_whitespace()), "END", Box::new(action_null)),
-             ("TRAILING_WHITESPACE",
-              Box::new(|_| true),
-              "END",
-              build_error_action("WHITESPACE EXPECTED")),
+             (TRAILING_WHITESPACE, Box::new(|c| c.is_whitespace()), END, Box::new(action_null)),
+             (TRAILING_WHITESPACE, Box::new(|_| true), END, build_error_action("WHITESPACE EXPECTED")),
 
-             ("OPREL_COMPOSITE",
-              Box::new(|c| c == '='),
-              "TRAILING_WHITESPACE",
-              build_action(OpRel, false)),
-             ("OPREL_COMPOSITE",
-              Box::new(|c| c.is_whitespace()),
-              "TRAILING_WHITESPACE",
-              Box::new(action_lambda)),
-             ("OPREL_COMPOSITE",
-              Box::new(|_| true),
-              "ERROR",
-              build_error_action("WHITESPACE OR = EXPECTED")),
+             (OPREL_COMPOSITE, Box::new(|c| c == '='), TRAILING_WHITESPACE, build_action(OpRel, false)),
+             (OPREL_COMPOSITE, Box::new(|c| c.is_whitespace()), TRAILING_WHITESPACE, Box::new(action_lambda)),
+             (OPREL_COMPOSITE, Box::new(|_| true), ERROR, build_error_action("WHITESPACE OR = EXPECTED")),
 
-             ("ID", Box::new(|c| c.is_alphabetic()), "ID", Box::new(action_id)),
-             ("ID",
-              Box::new(|c| c.is_whitespace()),
-              "TRAILING_WHITESPACE",
-              Box::new(action_id_try_reserved)),
-             ("ID", Box::new(|c| c == ')'), "END", Box::new(action_id_try_reserved)),
-             ("ID", Box::new(|_| true), "ERROR", build_error_action("BAD ID")),
+             (ID, Box::new(|c| c.is_alphabetic()), ID, Box::new(action_id)),
+             (ID, Box::new(|c| c.is_whitespace()), TRAILING_WHITESPACE, Box::new(action_id_try_reserved)),
+             (ID, Box::new(|c| c == ')'), END, Box::new(action_id_try_reserved)),
+             (ID, Box::new(|_| true), ERROR, build_error_action("BAD ID")),
 
-             ("NUMBER", Box::new(|c| c.is_numeric()), "NUMBER", build_action(Number, false)),
-             ("NUMBER",
-              Box::new(|c| c.is_whitespace()),
-              "TRAILING_WHITESPACE",
-              Box::new(action_lambda)),
-             ("NUMBER", Box::new(|c| c == ')'), "END", Box::new(action_lambda)),
-             ("NUMBER", Box::new(|_| true), "ERROR", build_error_action("BAD NUMBER")),
+             (NUMBER, Box::new(|c| c.is_numeric()), NUMBER, build_action(Number, false)),
+             (NUMBER, Box::new(|c| c.is_whitespace()), TRAILING_WHITESPACE, Box::new(action_lambda)),
+             (NUMBER, Box::new(|c| c == ')'), END, Box::new(action_lambda)),
+             (NUMBER, Box::new(|_| true), ERROR, build_error_action("BAD NUMBER")),
 
-             ("STRING", Box::new(|c| c == '"'), "STRING_END", build_action(Str, false)),
-             ("STRING", Box::new(|_| true), "STRING", build_action(Str, false)),
+             (STRING, Box::new(|c| c == '"'), STRING_END, build_action(Str, false)),
+             (STRING, Box::new(|_| true), STRING, build_action(Str, false)),
 
-             ("STRING_END",
-              Box::new(|c| c.is_whitespace()),
-              "TRAILING_WHITESPACE",
-              Box::new(action_lambda)),
-             ("STRING_END", Box::new(|c| c == ')'), "END", Box::new(action_lambda)),
-             ("STRING_END", Box::new(|_| true), "ERROR", build_error_action("BAD STRING"))]
+             (STRING_END, Box::new(|c| c.is_whitespace()), TRAILING_WHITESPACE, Box::new(action_lambda)),
+             (STRING_END, Box::new(|c| c == ')'), END, Box::new(action_lambda)),
+             (STRING_END, Box::new(|_| true), ERROR, build_error_action("BAD STRING"))]
     }
 }
