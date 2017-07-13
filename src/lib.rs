@@ -1,5 +1,6 @@
 use std::fmt::Debug;
 use std::default::Default;
+use std::collections::HashSet;
 //TODO
 //- Token should have col numbers
 //- Internal State is generic and can be an Enum
@@ -47,7 +48,7 @@ pub struct Lexer<C: Debug + PartialEq + Clone + Default> {
     start_index: usize,
     chars: Vec<char>,
     line_number: usize,
-    last_new_line: usize,
+    newline_indices: HashSet<usize>,
 }
 
 impl<C: Debug + PartialEq + Clone + Default> Lexer<C> {
@@ -59,7 +60,7 @@ impl<C: Debug + PartialEq + Clone + Default> Lexer<C> {
             start_index: 0,
             chars: src.chars().collect(),
             line_number: 1,
-            last_new_line: 0,
+            newline_indices: HashSet::new(),
         }
     }
 
@@ -103,16 +104,14 @@ impl<C: Debug + PartialEq + Clone + Default> Lexer<C> {
             let mut found = false;
             println!("c {:?} ", c);
 
-            if state == "INITIAL" && c == '\n' {
-                println!("INITIAL");
-                self.line_number += 1;
-                token.line_number = self.line_number;
-                self.last_new_line = index;
 
-            } else if c == '\n' && self.last_new_line != index {
-                println!("NOT INITIAL");
+            if c == '\n' && !self.newline_indices.contains(&index) {
+                self.newline_indices.insert(index);
                 self.line_number += 1;
-                self.last_new_line = index;
+
+                if state == "INITIAL" {
+                    token.line_number = self.line_number;
+                }
             }
 
             for &(ref from_state, ref is_match, ref to_state, ref action) in &self.delta {
