@@ -2,7 +2,6 @@ use std::fmt::Debug;
 use std::default::Default;
 use std::collections::HashSet;
 //TODO
-//- Token should have col numbers
 //- Internal State is generic and can be an Enum
 
 #[derive(Debug, PartialEq, Clone)]
@@ -31,7 +30,7 @@ impl Default for TokenCategory {
     }
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Default)]
 pub struct Token<C: Debug + PartialEq + Clone + Default> {
     category: C,
     lexeme: String,
@@ -84,17 +83,13 @@ impl<C: Debug + PartialEq + Clone + Default> Lexer<C> {
 
     pub fn get_next_token(&mut self) -> Option<Result<Token<C>, String>> {
         let mut index = self.start_index;
-        //let mut line_offset = self.line_offset;
         let mut state = "INITIAL";
         let mut error = false;
         let mut error_string = String::new();
 
-        // TODO can this be default?
         let mut token = Token {
-            category: Default::default(),
-            lexeme: String::new(),
             line_number: self.line_number,
-            col_number: 0,
+            ..Default::default()
         };
 
         loop {
@@ -132,8 +127,6 @@ impl<C: Debug + PartialEq + Clone + Default> Lexer<C> {
 
                 found = true;
                 index += 1;
-                //line_offset = index;
-                //println!("{}, {}", index, line_offset);
                 action(c,
                        &mut index,
                        &mut self.line_offset,
@@ -152,7 +145,6 @@ impl<C: Debug + PartialEq + Clone + Default> Lexer<C> {
         }
 
         self.start_index = index;
-        //self.line_offset = line_offset;
 
         if error_string.len() != 0 {
             error = true;
