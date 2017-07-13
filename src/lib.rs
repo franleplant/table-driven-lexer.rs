@@ -62,27 +62,30 @@ impl<C: Debug + PartialEq + Clone + Default> Lexer<C> {
     pub fn lex(&mut self) -> Vec<Token<C>>{
         let mut tokens: Vec<Token<C>> = vec![];
 
-        loop {
-            if self.start_index >= self.chars.len() {
-                break
-            }
-
-            let (error, maybe_token, last_index) = self.get_next_token();
-            if error {
-                panic!("ERROR: is error {:?}, token {:?}, last index {:?} in\n{:?}", error, maybe_token, last_index, tokens);
-            }
-
-            if let Some(token) = maybe_token {
-                tokens.push(token);
-                //# print (token["category"], token["lexeme"]);
+        while let Some(token_result) = self.get_next_token() {
+            match token_result {
+                Ok(token) => tokens.push(token),
+                Err(error) => panic!("ERROR {:?} in\n{:?}", error, tokens)
             }
         }
+        //loop {
+            //if self.start_index >= self.chars.len() {
+                //break
+            //}
+
+            //if let Some(token_result) = self.get_next_token() {
+                //match token_result {
+                    //Ok(token) => tokens.push(token),
+                    //Err(error) => panic!("ERROR {:?} in\n{:?}", error, tokens)
+                //}
+            //}
+        //}
 
         tokens
     }
 
 
-    pub fn get_next_token(&mut self) -> (bool, Option<Token<C>>, usize) {
+    pub fn get_next_token(&mut self) -> Option<Result<Token<C>, String>> {
         let mut index = self.start_index;
         let mut state = "INITIAL";
         let mut error = false;
@@ -123,28 +126,25 @@ impl<C: Debug + PartialEq + Clone + Default> Lexer<C> {
             }
 
             if !found {
-                //TODO proper error reporting
-                println!("ERROR");
-                error = true;
-                break;
+                return Some(Err(format!("Error: TOKEN NOT FOUND in {:?}, {}", index, token.lexeme)));
             }
         }
+
+        self.start_index = index;
 
         if error_string.len() != 0 {
             error = true;
         }
 
-        let maybe_token = if token.category == Default::default() {
+        if error {
+            return Some(Err(format!("Error in {:?}, {}", index, token.lexeme)));
+        }
+
+        return if token.category == Default::default() {
             None
         } else {
-            Some(token)
+            Some(Ok(token))
         };
-
-        //println!("error {:?} category {:?} lexeme {:?}", error, category, lexeme);
-
-        self.start_index = index;
-
-        return (error, maybe_token, index);
     }
 }
 
@@ -231,13 +231,13 @@ mod tests {
             let case_msg = format!("category {:?} lexeme {:?}", category, lexeme);
 
 
-            let (_, token, _) = Lexer::new(lexeme.clone(), get_delta()).get_next_token();
-            let token = token.unwrap();
+            let maybe_token = Lexer::new(lexeme.clone(), get_delta()).get_next_token();
+            let token = maybe_token.unwrap().unwrap();
             assert_eq!(token.category, category, "{:?}, {}", case_msg, 1);
             assert_eq!(token.lexeme, lexeme, "{:?}, {}", case_msg, 2);
 
-            let (_, token, _) = Lexer::new(lexeme.clone() + " ", get_delta()).get_next_token();
-            let token = token.unwrap();
+            let maybe_token = Lexer::new(lexeme.clone() + " ", get_delta()).get_next_token();
+            let token = maybe_token.unwrap().unwrap();
             assert_eq!(token.category, category, "{:?}, {}", case_msg, 3);
             assert_eq!(token.lexeme, lexeme, "{:?}, {}", case_msg, 4);
         }
