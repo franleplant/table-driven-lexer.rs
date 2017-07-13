@@ -1,7 +1,7 @@
 use std::fmt::Debug;
 use std::default::Default;
 //TODO
-//- Token has line and col numbers
+//- Token should have col numbers
 //- Internal State is generic and can be an Enum
 
 #[derive(Debug, PartialEq, Clone)]
@@ -34,6 +34,7 @@ impl Default for TokenCategory {
 pub struct Token<C: Debug + PartialEq + Clone + Default> {
     category: C,
     lexeme: String,
+    line_number: usize,
 }
 
 
@@ -45,6 +46,8 @@ pub struct Lexer<C: Debug + PartialEq + Clone + Default> {
     delta: Delta<C>,
     start_index: usize,
     chars: Vec<char>,
+    line_number: usize,
+    last_new_line: usize,
 }
 
 impl<C: Debug + PartialEq + Clone + Default> Lexer<C> {
@@ -55,6 +58,8 @@ impl<C: Debug + PartialEq + Clone + Default> Lexer<C> {
             delta: delta,
             start_index: 0,
             chars: src.chars().collect(),
+            line_number: 1,
+            last_new_line: 0,
         }
     }
 
@@ -68,18 +73,6 @@ impl<C: Debug + PartialEq + Clone + Default> Lexer<C> {
                 Err(error) => panic!("ERROR {:?} in\n{:?}", error, tokens),
             }
         }
-        //loop {
-        //if self.start_index >= self.chars.len() {
-        //break
-        //}
-
-        //if let Some(token_result) = self.get_next_token() {
-        //match token_result {
-        //Ok(token) => tokens.push(token),
-        //Err(error) => panic!("ERROR {:?} in\n{:?}", error, tokens)
-        //}
-        //}
-        //}
 
         tokens
     }
@@ -94,6 +87,7 @@ impl<C: Debug + PartialEq + Clone + Default> Lexer<C> {
         let mut token = Token {
             category: Default::default(),
             lexeme: String::new(),
+            line_number: self.line_number,
         };
 
         loop {
@@ -107,7 +101,19 @@ impl<C: Debug + PartialEq + Clone + Default> Lexer<C> {
 
             let c = self.chars[index];
             let mut found = false;
-            //println!("c {:?} ", c);
+            println!("c {:?} ", c);
+
+            if state == "INITIAL" && c == '\n' {
+                println!("INITIAL");
+                self.line_number += 1;
+                token.line_number = self.line_number;
+                self.last_new_line = index;
+
+            } else if c == '\n' && self.last_new_line != index {
+                println!("NOT INITIAL");
+                self.line_number += 1;
+                self.last_new_line = index;
+            }
 
             for &(ref from_state, ref is_match, ref to_state, ref action) in &self.delta {
                 if state != *from_state {
@@ -126,7 +132,8 @@ impl<C: Debug + PartialEq + Clone + Default> Lexer<C> {
             }
 
             if !found {
-                return Some(Err(format!("Error: TOKEN NOT FOUND in {:?}, {}",
+                return Some(Err(format!("Error: TOKEN NOT FOUND ({:?}) in {:?}, {}",
+                                        error_string,
                                         index,
                                         token.lexeme)));
             }
@@ -142,6 +149,7 @@ impl<C: Debug + PartialEq + Clone + Default> Lexer<C> {
             return Some(Err(format!("Error in {:?}, {}", index, token.lexeme)));
         }
 
+        println!("END");
         return if token.category == Default::default() {
                    None
                } else {
@@ -160,37 +168,42 @@ mod tests {
     fn lex() {
         use TokenCategory::*;
 
-        let cases = vec![("> 123", vec![(OpRel, ">"), (Number, "123")]),
-                         ("(define (myfn x y)\n  (+ 123 x y))",
-                          vec![(ParOpen, "("),
-                               (Define, "define"),
-                               (ParOpen, "("),
-                               (Id, "myfn"),
-                               (Id, "x"),
-                               (Id, "y"),
-                               (ParClose, ")"),
-                               (ParOpen, "("),
-                               (OpMat, "+"),
-                               (Number, "123"),
-                               (Id, "x"),
-                               (Id, "y"),
-                               (ParClose, ")"),
-                               (ParClose, ")")])];
+        let cases = vec![("> 123", vec![(OpRel, ">", 1), (Number, "123", 1)]),
+                         ("(define (myfn x y)\n(+ 123\nx\ny))",
+                          vec![(ParOpen, "(", 1),
+                               (Define, "define", 1),
+                               (ParOpen, "(", 1),
+                               (Id, "myfn", 1),
+                               (Id, "x", 1),
+                               (Id, "y", 1),
+                               (ParClose, ")", 1),
+                               (ParOpen, "(", 2),
+                               (OpMat, "+", 2),
+                               (Number, "123", 2),
+                               (Id, "x", 3),
+                               (Id, "y", 4),
+                               (ParClose, ")", 4),
+                               (ParClose, ")", 4)])];
 
         for (src, expected) in cases {
             let tokens = Lexer::new(src.to_string(), get_delta()).lex();
             let case_msg = format!("tokens {:?}, expected {:?}", tokens, expected);
             assert_eq!(tokens.len(), expected.len(), "{:?}", case_msg);
 
+            println!("++++++++++++++");
+            for t in &tokens {
+                println!("{:?}", t);
+            }
+
             for i in 0..tokens.len() {
                 let ref t = tokens[i];
-                let (ref category, ref lexeme) = expected[i];
+                let (ref category, ref lexeme, line_number) = expected[i];
                 let category = category;
                 let lexeme = lexeme.to_string();
 
-
-                assert_eq!(t.category, *category, "{:?}, {:?}", 1, case_msg);
-                assert_eq!(t.lexeme, lexeme, "{:?}, {:?}", 2, case_msg);
+                assert_eq!(t.category, *category, "category {:?}", case_msg);
+                assert_eq!(t.lexeme, lexeme, "lexeme {:?}", case_msg);
+                assert_eq!(t.line_number, line_number, "line_number {:?}", case_msg);
             }
         }
 
@@ -251,7 +264,7 @@ mod tests {
     fn action_null(_: char, _: &mut usize, _: &mut String, _: &mut Token<TokenCategory>) {}
 
     fn action_lambda(_: char, index: &mut usize, _: &mut String, _: &mut Token<TokenCategory>) {
-        *index -= 1
+        *index -= 1;
     }
 
     fn build_action(category: TokenCategory) -> Box<Action<TokenCategory>> {
