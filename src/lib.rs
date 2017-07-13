@@ -5,7 +5,7 @@ use std::default::Default;
 //- Internal State is generic and can be an Enum
 
 #[derive(Debug, PartialEq, Clone)]
-enum TokenCategory {
+pub enum TokenCategory {
     //Specials
     Default,
     Error,
@@ -31,7 +31,7 @@ impl Default for TokenCategory {
 }
 
 #[derive(Debug, PartialEq, Clone)]
-struct Token<C: Debug + PartialEq + Clone + Default> {
+pub struct Token<C: Debug + PartialEq + Clone + Default> {
     category: C,
     lexeme: String,
 }
@@ -41,13 +41,49 @@ type Action<C> = Fn(char, &mut usize, &mut String, &mut Token<C>);
 type Match = Fn(char) -> bool;
 type Delta<C> = Vec<(&'static str, Box<Match>, &'static str, Box<Action<C>>)>;
 
-struct Lexer<C: Debug + PartialEq + Clone + Default> {
+pub struct Lexer<C: Debug + PartialEq + Clone + Default> {
     delta: Delta<C>,
+    start_index: usize,
+    chars: Vec<char>,
 }
 
 impl<C: Debug + PartialEq + Clone + Default> Lexer<C> {
-    fn get_next_token(&self, src: String, start_index: usize) -> (bool, Option<Token<C>>, usize) {
-        let mut index = start_index;
+    pub fn new(src: String, delta: Delta<C>) -> Lexer<C> {
+        let src = src + " ";
+
+        Lexer {
+            delta: delta,
+            start_index: 0,
+            chars: src.chars().collect(),
+        }
+    }
+
+    // Lex until completion
+    pub fn lex(&mut self) -> Vec<Token<C>>{
+        let mut tokens: Vec<Token<C>> = vec![];
+
+        loop {
+            if self.start_index >= self.chars.len() {
+                break
+            }
+
+            let (error, maybe_token, last_index) = self.get_next_token();
+            if error {
+                panic!("ERROR: is error {:?}, token {:?}, last index {:?} in\n{:?}", error, maybe_token, last_index, tokens);
+            }
+
+            if let Some(token) = maybe_token {
+                tokens.push(token);
+                //# print (token["category"], token["lexeme"]);
+            }
+        }
+
+        tokens
+    }
+
+
+    pub fn get_next_token(&mut self) -> (bool, Option<Token<C>>, usize) {
+        let mut index = self.start_index;
         let mut state = "INITIAL";
         let mut error = false;
         let mut error_string = String::new();
@@ -62,12 +98,11 @@ impl<C: Debug + PartialEq + Clone + Default> Lexer<C> {
                 break;
             }
 
-            if index >= src.len() {
+            if index >= self.chars.len() {
                 break;
             }
 
-            let chars: Vec<char> = src.chars().collect();
-            let c = chars[index];
+            let c = self.chars[index];
             let mut found = false;
             //println!("c {:?} ", c);
 
@@ -90,21 +125,26 @@ impl<C: Debug + PartialEq + Clone + Default> Lexer<C> {
             if !found {
                 //TODO proper error reporting
                 println!("ERROR");
+                error = true;
                 break;
             }
         }
 
-        if error_string.len() != 0 || token.category == Default::default() {
+        if error_string.len() != 0 {
             error = true;
         }
 
-        //println!("error {:?} category {:?} lexeme {:?}", error, category, lexeme);
-        //let mut maybe_token = None;
-        //if token.category != "" {
-        //maybe_token = Some(token);
-        //}
+        let maybe_token = if token.category == Default::default() {
+            None
+        } else {
+            Some(token)
+        };
 
-        return (error, Some(token), index);
+        //println!("error {:?} category {:?} lexeme {:?}", error, category, lexeme);
+
+        self.start_index = index;
+
+        return (error, maybe_token, index);
     }
 }
 
@@ -115,38 +155,93 @@ mod tests {
     use super::*;
 
     #[test]
+    fn lex() {
+        use TokenCategory::*;
+
+        let cases = vec![
+            ("> 123", vec![
+                (OpRel, ">"),
+                (Number, "123"),
+            ]),
+            ("(define (myfn x y)\n  (+ 123 x y))", vec![
+                (ParOpen, "("),
+                (Define, "define"),
+                (ParOpen, "("),
+                (Id, "myfn"),
+                (Id, "x"),
+                (Id, "y"),
+                (ParClose, ")"),
+                (ParOpen, "("),
+                (OpMat, "+"),
+                (Number, "123"),
+                (Id, "x"),
+                (Id, "y"),
+                (ParClose, ")"),
+                (ParClose, ")"),
+            ]),
+        ];
+
+        for (src, expected) in cases {
+            let tokens = Lexer::new(src.to_string(), get_delta()).lex();
+            let case_msg = format!("tokens {:?}, expected {:?}", tokens, expected);
+            assert_eq!(tokens.len(), expected.len(), "{:?}", case_msg);
+
+            for i in 0..tokens.len() {
+                let ref t = tokens[i];
+                let (ref category, ref lexeme) = expected[i];
+                let category = category;
+                let lexeme = lexeme.to_string();
+
+
+                assert_eq!(t.category, *category, "{:?}, {:?}", 1, case_msg);
+                assert_eq!(t.lexeme, lexeme, "{:?}, {:?}", 2, case_msg);
+            }
+        }
+
+
+    }
+
+    #[test]
+    #[should_panic]
+    fn lex_fails() {
+
+        let cases = vec![
+            "abc123",
+        ];
+
+        for src in cases {
+            let _ = Lexer::new(src.to_string(), get_delta()).lex();
+        }
+    }
+
+    #[test]
     fn get_next_token() {
         use TokenCategory::*;
 
-        let l = Lexer { delta: get_delta() };
+        let cases = vec![
+            (Id, "hello"),
+            (Number, "1234"),
+            (OpRel, ">="),
+            (Str, "\"hello 123\"")
+        ];
+
+        for (category, lexeme) in cases {
+            let lexeme = lexeme.to_string();
+
+            let case_msg = format!("category {:?} lexeme {:?}", category, lexeme);
 
 
+            let (_, token, _) = Lexer::new(lexeme.clone(), get_delta()).get_next_token();
+            let token = token.unwrap();
+            assert_eq!(token.category, category, "{:?}, {}", case_msg, 1);
+            assert_eq!(token.lexeme, lexeme, "{:?}, {}", case_msg, 2);
 
-        let (_, token, _) = l.get_next_token("hello".to_string(), 0);
-        let token = token.unwrap();
-        assert_eq!(token.category, Id);
-        assert_eq!(token.lexeme, "hello".to_string());
+            let (_, token, _) = Lexer::new(lexeme.clone() + " ", get_delta()).get_next_token();
+            let token = token.unwrap();
+            assert_eq!(token.category, category, "{:?}, {}", case_msg, 3);
+            assert_eq!(token.lexeme, lexeme, "{:?}, {}", case_msg, 4);
+        }
 
-        let (_, token, _) = l.get_next_token("12345".to_string(), 0);
-        let token = token.unwrap();
-        assert_eq!(token.category, Number);
-        assert_eq!(token.lexeme, "12345".to_string());
-
-        //println!("test");
-        let (_, token, _) = l.get_next_token(">=".to_string(), 0);
-        let token = token.unwrap();
-        assert_eq!(token.category, OpRel);
-        assert_eq!(token.lexeme, ">=".to_string());
-
-        let (_, token, _) = l.get_next_token(">= ".to_string(), 0);
-        let token = token.unwrap();
-        assert_eq!(token.category, OpRel);
-        assert_eq!(token.lexeme, ">=".to_string());
-
-        let (_, token, _) = l.get_next_token("\"hello 123\"".to_string(), 0);
-        let token = token.unwrap();
-        assert_eq!(token.category, Str);
-        assert_eq!(token.lexeme, "\"hello 123\"".to_string());
     }
 
     fn get_category_for_id(s: &String) -> TokenCategory {
