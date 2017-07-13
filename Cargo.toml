@@ -1,5 +1,5 @@
 [package]
-name = "table-drive-lexer"
+name = "table_driven_lexer"
 version = "0.1.0"
 authors = ["Fran Guijarro <franleplant@gmail.com>"]
 
