@@ -37,10 +37,10 @@ pub enum State {
     ERROR,
     ID,
     TRAILING_WHITESPACE,
- OPREL_COMPOSITE,
- STRING,
- STRING_END,
- NUMBER,
+    OPREL_COMPOSITE,
+    STRING,
+    STRING_END,
+    NUMBER,
 }
 
 impl InitialState for State {
@@ -87,7 +87,9 @@ type Action<C> = Fn(char, &mut usize, &mut usize, &mut String, &mut Token<C>);
 type Match = Fn(char) -> bool;
 type Delta<C, S> = Vec<(S, Box<Match>, S, Box<Action<C>>)>;
 
-pub struct Lexer<C: Debug + PartialEq + Clone + Default, S: Debug + PartialEq + Clone + InitialState + EndState + ErrorState > {
+pub struct Lexer<C: Debug + PartialEq + Clone + Default,
+ S: Debug + PartialEq + Clone + InitialState + EndState + ErrorState>
+{
     delta: Delta<C, S>,
     start_index: usize,
     chars: Vec<char>,
@@ -96,7 +98,8 @@ pub struct Lexer<C: Debug + PartialEq + Clone + Default, S: Debug + PartialEq + 
     line_offset: usize,
 }
 
-impl<C: Debug + PartialEq + Clone + Default, S: Debug + PartialEq + Clone + InitialState + EndState + ErrorState> Lexer<C, S> {
+impl<C: Debug + PartialEq + Clone + Default,
+     S: Debug + PartialEq + Clone + InitialState + EndState + ErrorState> Lexer<C, S> {
     pub fn new(src: String, delta: Delta<C, S>) -> Lexer<C, S> {
         let src = src + " ";
 
@@ -379,35 +382,62 @@ mod tests {
         vec![(INITIAL, Box::new(|c| c.is_whitespace()), INITIAL, Box::new(action_null)),
              (INITIAL, Box::new(|c| c == '('), END, build_action(ParOpen, true)),
              (INITIAL, Box::new(|c| c == ')'), END, build_action(ParClose, true)),
-             (INITIAL, Box::new(|c| c == '+' || c == '-' || c == '*'), TRAILING_WHITESPACE, build_action(OpMat, true)),
+             (INITIAL,
+              Box::new(|c| c == '+' || c == '-' || c == '*'),
+              TRAILING_WHITESPACE,
+              build_action(OpMat, true)),
              (INITIAL, Box::new(|c| c == '='), TRAILING_WHITESPACE, build_action(OpRel, true)),
-             (INITIAL, Box::new(|c| c == '>' || c == '<'), OPREL_COMPOSITE, build_action(OpRel, true)),
+             (INITIAL,
+              Box::new(|c| c == '>' || c == '<'),
+              OPREL_COMPOSITE,
+              build_action(OpRel, true)),
              (INITIAL, Box::new(|c| c == '"'), STRING, build_action(Str, true)),
              (INITIAL, Box::new(|c| c.is_alphabetic()), ID, build_action(Id, true)),
              (INITIAL, Box::new(|c| c.is_numeric()), NUMBER, build_action(Number, true)),
              (INITIAL, Box::new(|_| true), ERROR, build_error_action("BAD INIT TOKEN")),
 
              (TRAILING_WHITESPACE, Box::new(|c| c.is_whitespace()), END, Box::new(action_null)),
-             (TRAILING_WHITESPACE, Box::new(|_| true), END, build_error_action("WHITESPACE EXPECTED")),
+             (TRAILING_WHITESPACE,
+              Box::new(|_| true),
+              END,
+              build_error_action("WHITESPACE EXPECTED")),
 
-             (OPREL_COMPOSITE, Box::new(|c| c == '='), TRAILING_WHITESPACE, build_action(OpRel, false)),
-             (OPREL_COMPOSITE, Box::new(|c| c.is_whitespace()), TRAILING_WHITESPACE, Box::new(action_lambda)),
-             (OPREL_COMPOSITE, Box::new(|_| true), ERROR, build_error_action("WHITESPACE OR = EXPECTED")),
+             (OPREL_COMPOSITE,
+              Box::new(|c| c == '='),
+              TRAILING_WHITESPACE,
+              build_action(OpRel, false)),
+             (OPREL_COMPOSITE,
+              Box::new(|c| c.is_whitespace()),
+              TRAILING_WHITESPACE,
+              Box::new(action_lambda)),
+             (OPREL_COMPOSITE,
+              Box::new(|_| true),
+              ERROR,
+              build_error_action("WHITESPACE OR = EXPECTED")),
 
              (ID, Box::new(|c| c.is_alphabetic()), ID, Box::new(action_id)),
-             (ID, Box::new(|c| c.is_whitespace()), TRAILING_WHITESPACE, Box::new(action_id_try_reserved)),
+             (ID,
+              Box::new(|c| c.is_whitespace()),
+              TRAILING_WHITESPACE,
+              Box::new(action_id_try_reserved)),
              (ID, Box::new(|c| c == ')'), END, Box::new(action_id_try_reserved)),
              (ID, Box::new(|_| true), ERROR, build_error_action("BAD ID")),
 
              (NUMBER, Box::new(|c| c.is_numeric()), NUMBER, build_action(Number, false)),
-             (NUMBER, Box::new(|c| c.is_whitespace()), TRAILING_WHITESPACE, Box::new(action_lambda)),
+             (NUMBER,
+              Box::new(|c| c.is_whitespace()),
+              TRAILING_WHITESPACE,
+              Box::new(action_lambda)),
              (NUMBER, Box::new(|c| c == ')'), END, Box::new(action_lambda)),
              (NUMBER, Box::new(|_| true), ERROR, build_error_action("BAD NUMBER")),
 
              (STRING, Box::new(|c| c == '"'), STRING_END, build_action(Str, false)),
              (STRING, Box::new(|_| true), STRING, build_action(Str, false)),
 
-             (STRING_END, Box::new(|c| c.is_whitespace()), TRAILING_WHITESPACE, Box::new(action_lambda)),
+             (STRING_END,
+              Box::new(|c| c.is_whitespace()),
+              TRAILING_WHITESPACE,
+              Box::new(action_lambda)),
              (STRING_END, Box::new(|c| c == ')'), END, Box::new(action_lambda)),
              (STRING_END, Box::new(|_| true), ERROR, build_error_action("BAD STRING"))]
     }
