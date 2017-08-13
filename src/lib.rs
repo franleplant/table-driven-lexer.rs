@@ -28,9 +28,10 @@ pub type Action<C> = Fn(char, &mut usize, &mut usize, &mut String, &mut Token<C>
 pub type Match = Fn(char) -> bool;
 pub type Delta<C, S> = Vec<(S, Box<Match>, S, Box<Action<C>>)>;
 
-pub struct Lexer<C: Debug + PartialEq + Clone + Default,
- S: Debug + PartialEq + Clone + InitialState + EndState + ErrorState>
-{
+pub struct Lexer<
+    C: Debug + PartialEq + Clone + Default,
+    S: Debug + PartialEq + Clone + InitialState + EndState + ErrorState,
+> {
     delta: Delta<C, S>,
     start_index: usize,
     chars: Vec<char>,
@@ -39,8 +40,10 @@ pub struct Lexer<C: Debug + PartialEq + Clone + Default,
     line_offset: usize,
 }
 
-impl<C: Debug + PartialEq + Clone + Default,
-     S: Debug + PartialEq + Clone + InitialState + EndState + ErrorState> Lexer<C, S> {
+impl<
+    C: Debug + PartialEq + Clone + Default,
+    S: Debug + PartialEq + Clone + InitialState + EndState + ErrorState,
+> Lexer<C, S> {
     pub fn new(src: String, delta: Delta<C, S>) -> Lexer<C, S> {
         let src = src + " ";
 
@@ -72,7 +75,6 @@ impl<C: Debug + PartialEq + Clone + Default,
     pub fn get_next_token(&mut self) -> Option<Result<Token<C>, String>> {
         let mut index = self.start_index;
         let mut state: S = InitialState::initial_state();
-        let mut error = false;
         let mut error_string = String::new();
 
         let mut token = Token {
@@ -115,39 +117,39 @@ impl<C: Debug + PartialEq + Clone + Default,
 
                 found = true;
                 index += 1;
-                action(c,
-                       &mut index,
-                       &mut self.line_offset,
-                       &mut error_string,
-                       &mut token);
+                action(
+                    c,
+                    &mut index,
+                    &mut self.line_offset,
+                    &mut error_string,
+                    &mut token,
+                );
                 state = to_state.clone();
                 break;
             }
 
             if !found {
-                return Some(Err(format!("Error: TOKEN NOT FOUND ({:?}) in {:?}, {}",
-                                        error_string,
-                                        index,
-                                        token.lexeme)));
+                return Some(Err(format!(
+                    "Error: TOKEN NOT FOUND ({:?}) in {:?}, {}",
+                    error_string,
+                    index,
+                    token.lexeme
+                )));
             }
         }
 
         self.start_index = index;
 
-        if error_string.len() != 0 {
-            error = true;
-        }
-
-        if error {
+        if state == ErrorState::error_state() {
             return Some(Err(format!("Error in {:?}, {}", index, token.lexeme)));
         }
 
         //println!("END");
         return if token.category == Default::default() {
-                   None
-               } else {
-                   Some(Ok(token))
-               };
+            None
+        } else {
+            Some(Ok(token))
+        };
     }
 }
 
