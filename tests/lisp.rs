@@ -164,13 +164,13 @@ fn get_delta() -> Delta<TokenCategory, State> {
             Id,
             Box::new(|c| c.is_whitespace()),
             TrailingWS,
-            Box::new(action_id_try_reserved)
+            Box::new(action_lambda)
         ),
         (
             Id,
             Box::new(|c| c == ')'),
             End,
-            Box::new(action_id_try_reserved)
+            Box::new(action_lambda)
         ),
         (Id, Box::new(|_| true), Error, build_error_action("BAD Id")),
 
@@ -267,17 +267,6 @@ fn build_error_action(some_error: &'static str) -> Box<Action<TokenCategory>> {
     })
 }
 
-
-fn action_id_try_reserved(
-    _: char,
-    index: &mut usize,
-    _: &mut usize,
-    _: &mut String,
-    token: &mut Token<TokenCategory>,
-) {
-    token.category = get_category_for_id(&token.lexeme);
-    *index -= 1;
-}
 
 fn action_id(
     c: char,
