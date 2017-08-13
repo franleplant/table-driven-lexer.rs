@@ -291,7 +291,7 @@ fn action_id(
 }
 
 #[test]
-fn lex() {
+fn lex_ok() {
     use TokenCategory::*;
 
     let cases = vec![
